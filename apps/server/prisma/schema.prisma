@@ -1,0 +1,132 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  user_id       String   @id @default(uuid()) @db.Uuid
+  first_name    String   @db.VarChar(20)
+  last_name     String   @db.VarChar(20)
+  user_avatar   String?
+  user_email    String   @unique @db.VarChar(70)
+  user_password String
+
+  chats_created Chat[]   @relation("ChatCreator")
+  branches      Branch[]
+  commits       Commit[]
+
+  chat_memberships ChatUser[]
+
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+}
+
+model Chat {
+  chat_id     String   @id @default(uuid()) @db.Uuid
+  chat_name   String   @db.VarChar(40)
+
+  creator_id  String   @db.Uuid
+  creator     User     @relation("ChatCreator", fields: [creator_id], references: [user_id])
+
+  shared_chat Boolean  @default(false)
+  pinned_chat Boolean  @default(false)
+
+  branches    Branch[]
+  commits     Commit[]
+
+  members     ChatUser[]
+
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+}
+
+model ChatUser {
+  id       String @id @default(uuid()) @db.Uuid
+
+  chat_id  String @db.Uuid
+  user_id  String @db.Uuid
+
+  chat     Chat   @relation(fields: [chat_id], references: [chat_id])
+  user     User   @relation(fields: [user_id], references: [user_id])
+
+  @@unique([chat_id, user_id])
+}
+
+model Branch {
+  branch_id   String  @id @default(uuid()) @db.Uuid
+  branch_name String  @db.VarChar(30)
+
+  chat_id     String  @db.Uuid
+  chat        Chat    @relation(fields: [chat_id], references: [chat_id])
+
+  creator_id  String  @db.Uuid
+  creator     User    @relation(fields: [creator_id], references: [user_id])
+
+  chat_history Json[] // [{ role: "system" | "user", content: "..." }]
+
+  is_main_branch Boolean @default(false)
+
+  // self hierarchy
+  parent_branch_id String?  @db.Uuid
+  parent_branch    Branch?  @relation("BranchHierarchy", fields: [parent_branch_id], references: [branch_id])
+  children         Branch[] @relation("BranchHierarchy")
+
+  // merge tracking
+  has_merged Boolean @default(false)
+
+  merged_to_branch_id String?  @db.Uuid
+  merged_to_branch    Branch?  @relation("BranchMerge", fields: [merged_to_branch_id], references: [branch_id])
+  merged_from         Branch[] @relation("BranchMerge")
+
+  commits     Commit[]
+
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@index([chat_id])
+}
+
+model Commit {
+  commit_id   String  @id @default(uuid()) @db.Uuid
+  commit_name String  @db.VarChar(50)
+
+  creator_id  String  @db.Uuid
+  creator     User    @relation(fields: [creator_id], references: [user_id])
+
+  chat_id     String  @db.Uuid
+  chat        Chat    @relation(fields: [chat_id], references: [chat_id])
+
+  branch_id   String  @db.Uuid
+  branch      Branch  @relation(fields: [branch_id], references: [branch_id])
+
+  contexts    Context[]
+
+  created_at  DateTime @default(now())
+
+  @@index([chat_id])
+  @@index([branch_id])
+}
+
+model Context {
+  context_id String  @id @default(uuid()) @db.Uuid
+
+  commit_id  String  @db.Uuid
+  commit     Commit  @relation(fields: [commit_id], references: [commit_id])
+
+  summary    String
+
+  context    Json[]  // last 14 chats + summary
+
+  created_at DateTime @default(now())
+
+  @@index([commit_id])
+}
